@@ -78,7 +78,13 @@ def apply_proxy(proxy: str) -> None:
     if GRADLE_PROPS.exists():
         existing = GRADLE_PROPS.read_text(encoding="utf-8").splitlines()
 
-    kept = [ln for ln in existing if not ln.strip().startswith("systemProp.")]
+    # 反复打包时别把上次写的代理行/注释越堆越多
+    kept = [
+        ln
+        for ln in existing
+        if not ln.strip().startswith("systemProp.")
+        and not ln.strip().startswith("# added by app/build.py")
+    ]
     if proxy:
         host, _, port = proxy.partition(":")
         port = port or "7897"
