@@ -68,6 +68,19 @@
 
 ---
 
+## 下载
+
+现成安装包在 [Releases](https://github.com/1772631792/SynSimplify/releases/latest) 页面：
+
+| 文件 | 平台 | 说明 |
+|---|---|---|
+| `SynSimplify-v1.0.0-*.apk` | Android 8.0+ | 手机端，安装时需允许「未知来源」 |
+| `SynSimplify.exe` | Windows 10 / 11 | 电脑端，单文件免安装，双击即用 |
+
+也随仓库放在 `app/dist/` 与 `host/dist/` 下；想自己编译看下面的「从源码构建」。
+
+---
+
 ## 快速开始
 
 ### 1. 电脑端
