@@ -1,0 +1,4 @@
+# 运行 SynSimplify 电脑端只需要标准库（tkinter 随 Python 自带）
+# 下面这些只在生成图标 / 打包 exe 时用到
+Pillow>=10.0
+pyinstaller>=6.0
