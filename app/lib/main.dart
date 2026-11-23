@@ -134,8 +134,20 @@ class _NavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final bottom = MediaQuery.paddingOf(context).bottom;
     return Container(
-      padding: EdgeInsets.only(left: 16, right: 16, bottom: bottom > 0 ? bottom : 14),
-      color: Colors.transparent,
+      padding: EdgeInsets.fromLTRB(16, 20, 16, bottom > 0 ? bottom : 14),
+      decoration: BoxDecoration(
+        // 让内容在导航栏附近自然淡出，避免文字从胶囊边缘漏出来
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Palette.bg.withValues(alpha: 0.0),
+            Palette.bg.withValues(alpha: 0.80),
+            Palette.bg,
+          ],
+          stops: const [0.0, 0.42, 1.0],
+        ),
+      ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(26),
         child: BackdropFilter(

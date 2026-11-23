@@ -39,6 +39,7 @@ from draw import (
     GhostButton,
     GradientButton,
     ProgressBar,
+    _round_rect,
     blend,
     dot,
     gradient_round,
@@ -128,8 +129,8 @@ class HostApp:
         self.root = tk.Tk()
         self.root.title(f"{APP_NAME} · 同网双向同步")
         self.root.configure(bg=BG)
-        self.root.geometry("1240x900")
-        self.root.minsize(1080, 760)
+        self.root.geometry("1240x950")
+        self.root.minsize(1080, 800)
 
         icon = bundled_icon()
         if icon is not None:
@@ -205,14 +206,21 @@ class HostApp:
         left_wrap.pack(side="left", fill="y")
         left_wrap.pack_propagate(False)
 
+        # 主按钮固定在左栏底部，永远看得见；上面那堆卡片放不下就滚
+        btn_holder = tk.Frame(left_wrap, bg=BG)
+        btn_holder.pack(side="bottom", fill="x", pady=(8, 2))
+
         left_canvas = tk.Canvas(left_wrap, bg=BG, highlightthickness=0, bd=0)
-        left_canvas.pack(side="left", fill="both", expand=True)
+        left_canvas.pack(side="top", fill="both", expand=True)
         left = tk.Frame(left_canvas, bg=BG)
         left_win = left_canvas.create_window((0, 0), window=left, anchor="nw")
 
         def _sync_left(_event=None) -> None:
             left_canvas.configure(scrollregion=left_canvas.bbox("all"))
             left_canvas.itemconfigure(left_win, width=left_canvas.winfo_width())
+            box = left_canvas.bbox("all")
+            if box and box[3] <= left_canvas.winfo_height() + 1:
+                left_canvas.yview_moveto(0)
 
         def _on_left_wheel(event) -> None:
             box = left_canvas.bbox("all")
@@ -226,7 +234,9 @@ class HostApp:
         self._build_folder_cards(left)
         self._build_direction_card(left)
         self._build_options_card(left)
-        self._build_buttons(left)
+        self._build_buttons(btn_holder)
+
+        left_canvas.after(60, lambda: left_canvas.yview_moveto(0))
 
         self._bind_wheel(left, _on_left_wheel)
         left_canvas.bind("<MouseWheel>", _on_left_wheel)
@@ -289,12 +299,40 @@ class HostApp:
             pass
 
     def _card(self, parent, title: str):
-        outer = tk.Frame(parent, bg=CARD, highlightbackground=STROKE, highlightthickness=1)
-        outer.pack(fill="x", pady=(0, 11))
-        inner = tk.Frame(outer, bg=CARD, padx=14, pady=11)
-        inner.pack(fill="both", expand=True)
+        """圆角卡片：Canvas 画底，内容放在上面，高度跟着内容走。"""
+        outer = tk.Canvas(parent, bg=parent.cget("bg"), highlightthickness=0, bd=0, height=72)
+        outer.pack(fill="x", pady=(0, 10))
+
+        inner = tk.Frame(outer, bg=CARD)
+        win = outer.create_window(16, 12, window=inner, anchor="nw")
+        box = {"h": 0}
+
+        def _paint() -> None:
+            outer.delete("bg")
+            w = outer.winfo_width()
+            h = outer.winfo_height()
+            if w < 4 or h < 4:
+                return
+            _round_rect(outer, 0, 0, w - 1, h - 1, 16, fill=CARD, outline=STROKE, tags="bg")
+            outer.tag_lower("bg")
+
+        def _fit(_event=None) -> None:
+            w = max(160, outer.winfo_width())
+            inner.update_idletasks()
+            want = inner.winfo_reqheight() + 24
+            if want != box["h"]:
+                box["h"] = want
+                outer.configure(height=want)
+            outer.coords(win, 16, 12)
+            outer.itemconfigure(win, width=w - 32)
+            _paint()
+
+        outer.bind("<Configure>", _fit)
+        inner.bind("<Configure>", _fit)
+        outer.after_idle(_fit)
+
         tk.Label(inner, text=title, bg=CARD, fg=MUTED,
-                 font=(self.font, 8, "bold")).pack(anchor="w")
+                 font=(self.font, 8, "bold")).pack(anchor="w", pady=(0, 3))
         return inner
 
     def _build_folder_cards(self, parent) -> None:
@@ -364,18 +402,18 @@ class HostApp:
 
     def _build_buttons(self, parent) -> None:
         row = tk.Frame(parent, bg=BG)
-        row.pack(fill="x", pady=(2, 0))
+        row.pack(fill="x", pady=(4, 2))
         self.btn_preview = GhostButton(row, "预览差异", command=lambda: self.start_sync(True),
-                                       width=104, height=52, bg=BG, fg=SUB,
-                                       font=(self.font, 9), color=STROKE)
+                                       width=118, height=60, bg=BG, fg=SUB,
+                                       font=(self.font, 10), color=STROKE)
         self.btn_preview.pack(side="left")
         self.btn_sync = GradientButton(row, "立即同步", command=lambda: self.start_sync(False),
-                                       height=52, bg=BG, colors=MODE_COLORS[self.mode],
-                                       font=(self.font, 12, "bold"))
-        self.btn_sync.pack(side="left", fill="x", expand=True, padx=(9, 0))
+                                       height=60, bg=BG, colors=MODE_COLORS[self.mode],
+                                       font=(self.font, 14, "bold"))
+        self.btn_sync.pack(side="left", fill="x", expand=True, padx=(10, 0))
 
     def _build_right(self, parent) -> None:
-        panel = tk.Frame(parent, bg=PANEL, highlightbackground=STROKE, highlightthickness=1)
+        panel = tk.Frame(parent, bg=PANEL)
         panel.pack(side="left", fill="both", expand=True, padx=(16, 0))
         panel.grid_rowconfigure(2, weight=1)
         panel.grid_columnconfigure(0, weight=1)

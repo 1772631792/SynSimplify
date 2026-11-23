@@ -85,6 +85,8 @@ def apply_proxy(proxy: str) -> None:
         if not ln.strip().startswith("systemProp.")
         and not ln.strip().startswith("# added by app/build.py")
     ]
+    while kept and not kept[-1].strip():
+        kept.pop()
     if proxy:
         host, _, port = proxy.partition(":")
         port = port or "7897"

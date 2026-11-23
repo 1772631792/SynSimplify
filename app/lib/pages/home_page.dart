@@ -51,52 +51,50 @@ class _HomePageState extends State<HomePage> {
           _wasRunning = app.running;
 
           final bottomInset = MediaQuery.paddingOf(context).bottom;
-          return Stack(
+          // 列表和操作条上下排开，操作条不再盖住内容
+          return Column(
             children: [
-              ListView(
-                controller: _scroll,
-                padding: EdgeInsets.fromLTRB(18, 8, 18, bottomInset + 210),
-                children: [
-                  _header(context),
-                  const SizedBox(height: 16),
-                  _connectionCard(context),
-                  const SizedBox(height: 14),
-                  _folderCard(context),
-                  const SizedBox(height: 12),
-                  _directionCard(),
-                  const SizedBox(height: 12),
-                  _optionsCard(),
-                  if (app.running || app.finishedAt > 0) ...[
-                    const SizedBox(height: 14),
-                    _progressCard(),
-                  ],
-                  if (app.ops.isNotEmpty) ...[
+              Expanded(
+                child: ListView(
+                  controller: _scroll,
+                  padding: const EdgeInsets.fromLTRB(18, 8, 18, 16),
+                  children: [
+                    _header(context),
                     const SizedBox(height: 16),
-                    _recentCard(context),
+                    _connectionCard(context),
+                    const SizedBox(height: 14),
+                    _folderCard(context),
+                    const SizedBox(height: 12),
+                    _directionCard(),
+                    const SizedBox(height: 12),
+                    _optionsCard(),
+                    if (app.running || app.finishedAt > 0) ...[
+                      const SizedBox(height: 14),
+                      _progressCard(),
+                    ],
+                    if (app.ops.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      _recentCard(context),
+                    ],
+                    const SizedBox(height: 6),
                   ],
-                  const SizedBox(height: 10),
-                ],
-              ),
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: bottomInset + 78,
-                child: Container(
-                  padding: const EdgeInsets.fromLTRB(18, 22, 18, 0),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Palette.bg.withValues(alpha: 0.0),
-                        Palette.bg.withValues(alpha: 0.92),
-                        Palette.bg,
-                      ],
-                      stops: const [0.0, 0.55, 1.0],
-                    ),
-                  ),
-                  child: _actions(context),
                 ),
+              ),
+              Container(
+                padding: EdgeInsets.fromLTRB(18, 8, 18, bottomInset + 30),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Palette.bg.withValues(alpha: 0.0),
+                      Palette.bg.withValues(alpha: 0.92),
+                      Palette.bg,
+                    ],
+                    stops: const [0.0, 0.30, 1.0],
+                  ),
+                ),
+                child: _actions(context),
               ),
             ],
           );
@@ -696,14 +694,18 @@ class _HomePageState extends State<HomePage> {
           enabled: connected,
           onTap: () => app.startSync(),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 2),
         TextButton.icon(
           onPressed: connected ? () => app.startSync(dry: true) : null,
-          icon: const Icon(Icons.compare_arrows_rounded, size: 17),
+          icon: const Icon(Icons.compare_arrows_rounded, size: 16),
           label: const Text('只预览差异，不动文件'),
           style: TextButton.styleFrom(
             foregroundColor: Palette.textDim,
             disabledForegroundColor: Palette.textMuted,
+            minimumSize: const Size(0, 34),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            visualDensity: VisualDensity.compact,
+            textStyle: const TextStyle(fontSize: 12.5),
           ),
         ),
       ],

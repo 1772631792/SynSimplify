@@ -335,20 +335,20 @@ class CheckBox(tk.Frame):
         self._bg = bg
         self._command = command
 
-        self.box = tk.Canvas(self, width=18, height=18, bg=bg,
+        self.box = tk.Canvas(self, width=22, height=22, bg=bg,
                              highlightthickness=0, bd=0, takefocus=0, cursor="hand2")
-        self.box.pack(side="left", pady=(1, 0))
+        self.box.pack(side="left", pady=(2, 0))
 
         col = tk.Frame(self, bg=bg)
-        col.pack(side="left", fill="x", expand=True, padx=(9, 0))
+        col.pack(side="left", fill="x", expand=True, padx=(11, 0))
         self.label = tk.Label(col, text=text, bg=bg, fg=TEXT,
-                              font=(font_family, 9), anchor="w", cursor="hand2")
+                              font=(font_family, 10), anchor="w", cursor="hand2")
         self.label.pack(fill="x")
         self.hint_label = None
         if hint:
             self.hint_label = tk.Label(col, text=hint, bg=bg, fg=MUTED,
                                        font=(font_family, 8), anchor="w", cursor="hand2")
-            self.hint_label.pack(fill="x")
+            self.hint_label.pack(fill="x", pady=(1, 0))
 
         for widget in (self, self.box, col, self.label, self.hint_label):
             if widget is not None:
@@ -374,12 +374,12 @@ class CheckBox(tk.Frame):
     def _draw(self) -> None:
         self.box.delete("all")
         if self._value:
-            self.box.create_rectangle(1, 1, 17, 17, fill=ACCENT, outline=ACCENT)
-            self.box.create_line(5, 9, 8, 12, 13, 6, fill=WHITE, width=2,
+            _round_rect(self.box, 1, 1, 20, 20, 7, fill=ACCENT, outline=ACCENT)
+            self.box.create_line(6, 11, 9.5, 14.5, 16, 7, fill=WHITE, width=2,
                                  capstyle=tk.ROUND, joinstyle=tk.ROUND)
         else:
-            self.box.create_rectangle(1, 1, 17, 17, fill=mix_bg("#FFFFFF", 0.03, self._bg),
-                                      outline=STROKE)
+            _round_rect(self.box, 1, 1, 20, 20, 7,
+                        fill=mix_bg("#FFFFFF", 0.03, self._bg), outline=STROKE)
 
 
 # ------------------------------------------------------------------ 方向卡片
@@ -395,37 +395,36 @@ class DirectionTile(tk.Frame):
         self._colors = colors
         self._selected = False
         self._command = command
-        self.configure(highlightthickness=1, highlightbackground=STROKE,
-                       highlightcolor=STROKE)
+        self.configure(highlightthickness=0)
 
         self.outer = tk.Frame(self, bg=bg)
-        self.outer.pack(fill="x", expand=True)
+        self.outer.pack(fill="x", expand=True, pady=2)
 
-        self.bar = tk.Canvas(self.outer, width=4, height=54, bg=bg, highlightthickness=0, bd=0)
+        self.bar = tk.Canvas(self.outer, width=4, height=56, bg=bg, highlightthickness=0, bd=0)
         self.bar.pack(side="left", fill="y")
 
-        self.icon = tk.Canvas(self.outer, width=30, height=30, bg=bg,
+        self.icon = tk.Canvas(self.outer, width=34, height=34, bg=bg,
                               highlightthickness=0, bd=0)
-        self.icon.pack(side="left", padx=(9, 9), pady=9)
+        self.icon.pack(side="left", padx=(12, 11), pady=10)
 
         self.col = tk.Frame(self.outer, bg=bg)
-        self.col.pack(side="left", fill="x", expand=True, pady=7)
+        self.col.pack(side="left", fill="x", expand=True, pady=8)
         self.title_label = tk.Label(self.col, text=title, bg=bg, fg=TEXT,
-                                    font=(font_family, 10, "bold"), anchor="w")
+                                    font=(font_family, 11, "bold"), anchor="w")
         self.title_label.pack(fill="x")
         self.sub_label = tk.Label(self.col, text=subtitle, bg=bg, fg=MUTED,
-                                  font=(font_family, 8), anchor="w")
-        self.sub_label.pack(fill="x")
+                                  font=(font_family, 9), anchor="w")
+        self.sub_label.pack(fill="x", pady=(1, 0))
 
         self.right = tk.Frame(self.outer, bg=bg)
-        self.right.pack(side="right", padx=(6, 10))
+        self.right.pack(side="right", padx=(6, 14))
         self.badge = tk.Label(self.right, text=badge, bg=bg, fg=ACCENT2,
                               font=(font_family, 8, "bold"))
         if badge:
             self.badge.pack(anchor="e")
-        self.radio = tk.Canvas(self.right, width=16, height=16, bg=bg,
+        self.radio = tk.Canvas(self.right, width=18, height=18, bg=bg,
                                highlightthickness=0, bd=0)
-        self.radio.pack(anchor="e", pady=(3, 0))
+        self.radio.pack(anchor="e", pady=(4, 0))
 
         targets = [self, self.outer, self.bar, self.icon, self.col,
                    self.title_label, self.sub_label, self.right, self.badge, self.radio]
@@ -444,31 +443,33 @@ class DirectionTile(tk.Frame):
         self._draw()
 
     def _draw(self) -> None:
-        bg = mix_bg(self._colors[0], 0.16, CARD2) if self._selected else self._bg
-        border = blend(STROKE, self._colors[0], 0.55) if self._selected else STROKE
+        if self._selected:
+            bg = mix_bg(self._colors[0], 0.16, CARD2)
+        else:
+            bg = mix_bg("#FFFFFF", 0.035, self._bg)
         for widget in (self, self.outer, self.col, self.right, self.icon, self.bar, self.radio):
             widget.configure(bg=bg)
         for widget in (self.title_label, self.sub_label, self.badge):
             widget.configure(bg=bg)
-        self.configure(highlightbackground=border, highlightcolor=border)
 
         self.bar.delete("all")
         if self._selected:
-            gradient_fill(self.bar, 0, 0, 4, 54, self._colors[0], self._colors[1],
-                          horizontal=False, steps=18, tags="bar")
+            bar_h = max(56, self.bar.winfo_height())
+            gradient_fill(self.bar, 0, 0, 4, bar_h, self._colors[0], self._colors[1],
+                          horizontal=False, steps=20, tags="bar")
 
         self.icon.delete("all")
-        gradient_round(self.icon, 30, 30, 9, self._colors[0], self._colors[1], bg)
-        self.icon.create_text(15, 15, text="↑" if self.key == "pull" else "↓"
+        gradient_round(self.icon, 34, 34, 11, self._colors[0], self._colors[1], bg)
+        self.icon.create_text(17, 17, text="↑" if self.key == "pull" else "↓"
                               if self.key == "push" else "⇅",
-                              fill=WHITE, font=("Segoe UI", 11, "bold"))
+                              fill=WHITE, font=("Segoe UI", 13, "bold"))
 
         self.radio.delete("all")
         if self._selected:
-            self.radio.create_oval(1, 1, 15, 15, outline=self._colors[0], width=2)
-            self.radio.create_oval(5, 5, 11, 11, fill=self._colors[0], outline="")
+            self.radio.create_oval(1, 1, 17, 17, outline=self._colors[0], width=2)
+            self.radio.create_oval(6, 6, 12, 12, fill=self._colors[0], outline="")
         else:
-            self.radio.create_oval(1, 1, 15, 15, outline=STROKE, width=2)
+            self.radio.create_oval(1, 1, 17, 17, outline=STROKE, width=2)
 
 
 # ------------------------------------------------------------------ 小标签

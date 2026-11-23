@@ -99,7 +99,7 @@ class LocalServer {
           'root': root,
           'rootName': baseName(root),
           'ver': 1,
-          'app': '1.0.0',
+          'app': '1.0.1',
         });
         return;
       }
