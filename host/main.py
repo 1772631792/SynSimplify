@@ -35,6 +35,8 @@ from config import (
     human_size,
     load_config,
 )
+import lanscan
+import netinfo
 from discovery import beacon_loop, discovery_loop
 from server import start_http
 from state import HostState
@@ -108,6 +110,29 @@ def run_headless(state: HostState, port: int, args) -> int:
         print("\n[+] 已停止")
     finally:
         server.shutdown()
+    return 0
+
+
+# ------------------------------------------------------------------ 扫描
+def run_scan() -> int:
+    """广播不靠谱时的兜底：直接扫网段上的手机端口。"""
+    print(f"[+] {APP_NAME} v{APP_VER} · 扫描当前网段")
+    for nic in netinfo.nics():
+        print(f"    网卡：{nic.label()}{'  (WiFi)' if nic.wireless else ''}")
+    for adapter in netinfo.wireless_down():
+        print(f"[!] {adapter.name} 未连接 WiFi，手机走 WiFi 的话连不到这台电脑")
+    if not netinfo.nics():
+        print("[x] 没有可用的 IPv4 网卡")
+        return 1
+
+    print("[+] 扫描中，最多几秒 …")
+    hits = lanscan.scan(on_log=lambda text: print("    " + text))
+    if not hits:
+        print("[x] 没扫到手机：确认手机和电脑连的是同一个路由器（AP 隔离 / 访客网络会让两边互相看不见）")
+        return 1
+    for hit in hits:
+        print(f"[ok] {hit['name']}  {hit['ip']}:{hit['port']}  {hit.get('root', '')}")
+    print("[ok] 可以在手机端「设置」里手动填电脑 IP，或直接在电脑端点「立即同步」")
     return 0
 
 
@@ -275,6 +300,30 @@ def run_selftest() -> int:
         client.download("note.md", target)
         check("下载: GET 到的内容和手机一致",
               target.exists() and _digest(target) == _digest(phone_root / "note.md"))
+
+        # 10. 端口扫描能认出「手机」（本机起个假手机顶替）
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+        class _FakePhone(BaseHTTPRequestHandler):
+            def log_message(self, *args):
+                pass
+
+            def do_GET(self):
+                body = json.dumps({"ok": True, "id": "probe-phone", "name": "探针手机",
+                                   "root": "/sdcard/SynSimplify", "port": 37761}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+        fake = ThreadingHTTPServer(("127.0.0.1", 37761), _FakePhone)
+        threading.Thread(target=fake.serve_forever, daemon=True).start()
+        try:
+            hit = lanscan._probe("127.0.0.1", 37761)
+        finally:
+            fake.shutdown()
+        check("扫描: 端口扫到手机并读出名字", bool(hit) and hit.get("name") == "探针手机")
     finally:
         client.close()
         server_pc.shutdown()
@@ -290,6 +339,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=f"{APP_NAME} · 同网双向文件夹同步")
     parser.add_argument("--no-gui", action="store_true", help="不启动图形界面")
     parser.add_argument("--selftest", action="store_true", help="自检后退出")
+    parser.add_argument("--scan", action="store_true", help="扫描当前网段找手机，打印结果后退出")
     parser.add_argument("--port", type=int, default=0, help=f"服务端口（默认 {HTTP_PORT}）")
     parser.add_argument("--dir", default="", help="同步文件夹")
     parser.add_argument("--sync", default="", help="启动后直接同步到 IP:端口")
@@ -300,6 +350,9 @@ def main() -> int:
 
     if args.selftest:
         return run_selftest()
+
+    if args.scan:
+        return run_scan()
 
     cfg = load_config()
     port = args.port or int(cfg.get("port") or HTTP_PORT)

@@ -17,6 +17,20 @@ IF_OPER_STATUS_UP = 1
 
 
 @dataclass(frozen=True)
+class Adapter:
+    """一块网卡（可能在断开状态，此时 ips 为空）。"""
+
+    name: str
+    iftype: int
+    up: bool
+    ips: tuple[str, ...] = ()
+
+    @property
+    def wireless(self) -> bool:
+        return self.iftype == IF_TYPE_IEEE80211
+
+
+@dataclass(frozen=True)
 class Nic:
     """一块网卡上的一个 IPv4 地址。"""
 
@@ -46,7 +60,7 @@ def _is_usable(ip: str) -> bool:
 
 
 # ----------------------------------------------------------------- windows
-def _windows_nics() -> list[Nic]:
+def _windows_adapters() -> list[Adapter]:
     import ctypes
     from ctypes import wintypes
 
@@ -125,15 +139,13 @@ def _windows_nics() -> list[Nic]:
     else:
         return []
 
-    out: list[Nic] = []
-    seen: set[str] = set()
+    out: list[Adapter] = []
     node = head
     while node:
         adapter = node.contents
         node = adapter.Next
-        if adapter.OperStatus != IF_OPER_STATUS_UP:
-            continue
         name = adapter.FriendlyName or adapter.Description or ""
+        ips: list[str] = []
         u = adapter.FirstUnicastAddress
         while u:
             item = u.contents
@@ -145,10 +157,14 @@ def _windows_nics() -> list[Nic]:
                 continue
             sin = ctypes.cast(addr, ctypes.POINTER(SOCKADDR_IN)).contents
             ip = socket.inet_ntoa(bytes(bytearray(sin.sin_addr)))
-            if not _is_usable(ip) or ip in seen:
-                continue
-            seen.add(ip)
-            out.append(Nic(ip=ip, name=name, iftype=int(adapter.IfType)))
+            if _is_usable(ip):
+                ips.append(ip)
+        out.append(Adapter(
+            name=name,
+            iftype=int(adapter.IfType),
+            up=adapter.OperStatus == IF_OPER_STATUS_UP,
+            ips=tuple(ips),
+        ))
     return out
 
 
@@ -168,30 +184,55 @@ def _fallback_nics() -> list[Nic]:
 
 _VIRTUAL_HINTS = (
     "tailscale", "zerotier", "vmware", "virtualbox", "hyper-v", "vethernet",
-    "wsl", "docker", "loopback", "tap-", "tun", "npcap",
+    "wsl", "docker", "loopback", "tap-", "tun", "npcap", "sangfor", "ssl vpn",
 )
 
 
-def _looks_virtual(nic: Nic) -> bool:
-    name = (nic.name or "").lower()
-    return any(hint in name for hint in _VIRTUAL_HINTS)
+def _looks_virtual(name: str) -> bool:
+    lowered = (name or "").lower()
+    return any(hint in lowered for hint in _VIRTUAL_HINTS)
+
+
+def adapters() -> list[Adapter]:
+    """所有网卡，包括已断开 / 没有 IP 的（诊断时用）。"""
+    if sys.platform == "win32":
+        try:
+            return _windows_adapters()
+        except Exception:  # noqa: BLE001 - 拿不到就走兜底，不要影响启动
+            return []
+    return []
 
 
 def nics() -> list[Nic]:
     """当前启用的 IPv4 网卡（Windows 上带无线标识，虚拟网卡会被剔掉）。"""
-    out: list[Nic] = []
+    found: list[Nic] = []
     if sys.platform == "win32":
-        try:
-            out = _windows_nics()
-        except Exception:  # noqa: BLE001 - 拿不到就走兜底，不要影响启动
-            out = []
+        for adapter in adapters():
+            if not adapter.up:
+                continue
+            for ip in adapter.ips:
+                found.append(Nic(ip=ip, name=adapter.name, iftype=adapter.iftype))
     else:
-        out = _fallback_nics()
+        found = _fallback_nics()
 
-    physical = [n for n in out if not _looks_virtual(n)]
-    return physical or out
+    physical = [n for n in found if not _looks_virtual(n.name)]
+    return physical or found
+
+
+def wireless_down() -> list[Adapter]:
+    """有无线网卡但这会儿没连上 WiFi —— 手机自然找不过来。
+
+    「本地连接* 1/2」这类是 Windows 给 WiFi Direct 建的虚拟适配器，没意义。
+    """
+    return [a for a in adapters()
+            if a.wireless and not a.up
+            and not _looks_virtual(a.name)
+            and "*" not in a.name]
 
 
 if __name__ == "__main__":  # pragma: no cover - 手动排查用
-    for nic in nics():
-        print(f"{nic.ip:16} {'WiFi' if nic.wireless else '有线':4} {nic.name}")
+    for adapter in adapters():
+        flag = "up  " if adapter.up else "down"
+        kind = "WiFi" if adapter.wireless else "有线"
+        ips = ", ".join(adapter.ips) or "-"
+        print(f"{flag} {kind} {adapter.name:34} {ips}")

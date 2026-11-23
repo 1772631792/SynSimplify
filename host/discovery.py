@@ -93,6 +93,8 @@ def discovery_loop(state: HostState, stop: threading.Event) -> None:
             continue
 
         incoming = _parse(text)
+        state.last_discover_ip = ip
+        state.last_discover_at = time.time()
         state.note_peer(ip, incoming)
 
         try:

@@ -29,6 +29,8 @@ from config import (
     short_path,
     update_config,
 )
+import lanscan
+import netinfo
 from discovery import beacon_loop, discovery_loop
 from draw import (
     Avatar,
@@ -106,6 +108,8 @@ class HostApp:
         self.selected_peer_id = str(cfg.get("peer_id") or "")
         self.peers: list[dict] = []
         self._peer_sig = None
+        self._nudge = ""
+        self._scanning = False
         self._tiles: dict[str, DirectionTile] = {}
 
         self.running = False
@@ -150,6 +154,10 @@ class HostApp:
         threading.Thread(target=beacon_loop, args=(self.state, self.stop), daemon=True).start()
         self.addr_label.configure(text=f"{local_ip()}:{self.port}")
         self.set_footer("已就绪：手机打开 SynSimplify，同一个 WiFi 会自动发现这台电脑")
+
+        # 常见坑：无线网卡在，但压根没连上 WiFi（只有网线）
+        if netinfo.wireless_down() and not [n for n in netinfo.nics() if n.wireless]:
+            self.set_footer("提示：检测到无线网卡但未连接 WiFi —— 手机若走 WiFi，需要先让电脑连上同一个无线网络")
 
     def _dark_titlebar(self) -> None:
         if sys.platform != "win32":
@@ -380,8 +388,11 @@ class HostApp:
         self.peer_badge = tk.Label(head, text="0 台", bg=mix_bg(ACCENT, 0.16, PANEL),
                                    fg=ACCENT, font=(self.font, 8, "bold"), padx=8, pady=2)
         self.peer_badge.grid(row=0, column=1, sticky="w", padx=(9, 0))
+        self.btn_scan = GhostButton(head, "扫描本网络", command=self.scan_lan, width=96,
+                                    height=30, bg=PANEL, fg=ACCENT, font=(self.font, 8))
+        self.btn_scan.grid(row=0, column=3, sticky="e", padx=(0, 8))
         GhostButton(head, "打开文件夹", command=self.open_root, width=96, height=30,
-                    bg=PANEL, fg=SUB, font=(self.font, 8)).grid(row=0, column=3, sticky="e")
+                    bg=PANEL, fg=SUB, font=(self.font, 8)).grid(row=0, column=4, sticky="e")
 
         self.peer_box = tk.Frame(panel, bg=PANEL)
         self.peer_box.grid(row=1, column=0, sticky="ew", padx=10, pady=(0, 8))
@@ -581,6 +592,34 @@ class HostApp:
         if peer:
             self.set_footer(f"已选择 {peer['name']} · {peer['ip']}:{peer['port']}")
 
+    def scan_lan(self) -> None:
+        """广播被路由器 / 防火墙拦掉时，直接扫网段上的 37131 端口找手机。"""
+        if getattr(self, "_scanning", False):
+            return
+        self._scanning = True
+        self.btn_scan.set_enabled(False)
+        self.btn_scan.set_text("扫描中…")
+        self.set_footer("正在扫描当前网段找手机，约 3~8 秒…")
+
+        def work() -> None:
+            hits: list[dict] = []
+            try:
+                hits = lanscan.scan()
+            except Exception as exc:  # noqa: BLE001
+                self.state.events.put(("warn", {"text": f"扫描失败：{exc}"}))
+            finally:
+                self._scanning = False
+            for hit in hits:
+                self.state.note_peer(hit["ip"], {
+                    "name": hit["name"],
+                    "id": hit["id"],
+                    "port": hit["port"],
+                    "root": hit.get("root", ""),
+                })
+            self.state.events.put(("scan", {"count": len(hits)}))
+
+        threading.Thread(target=work, daemon=True).start()
+
     # ------------------------------------------------------------ 手机列表
     def _refresh_peers(self) -> None:
         peers = self.state.peers_online()
@@ -620,6 +659,25 @@ class HostApp:
         else:
             self.remote_label.configure(text="连上手机后显示")
             self.remote_hint.configure(text="手机上可以随时换一个文件夹")
+
+        if not peers:
+            self._nudge_footer()
+
+    def _nudge_footer(self) -> None:
+        """没连上时给出能定位问题的提示，而不是干等着。"""
+        ip = self.state.last_discover_ip
+        fresh = bool(ip) and (time.time() - self.state.last_discover_at) < 8
+        if fresh:
+            text = f"收到 {ip} 的广播但握手没成功 —— 多半是防火墙拦了 TCP {self.port}"
+        elif netinfo.wireless_down() and not [n for n in netinfo.nics() if n.wireless]:
+            text = "无线网卡未连接 WiFi：手机走 WiFi 的话，两边不在同一个网络"
+        else:
+            text = ""
+        if text and text != self._nudge:
+            self._nudge = text
+            self.set_footer(text)
+        elif not text:
+            self._nudge = ""
 
     def _render_peers(self, force: bool = False) -> None:
         for child in self.peer_box.winfo_children():
@@ -766,6 +824,13 @@ class HostApp:
             self.set_footer(payload.get("text", ""))
         elif kind == "info":
             self.set_footer(payload.get("text", ""))
+        elif kind == "scan":
+            self.btn_scan.set_text("扫描本网络")
+            self.btn_scan.set_enabled(True)
+            self._refresh_peers()
+            count = int(payload.get("count", 0) or 0)
+            self.set_footer(f"扫描完成：找到 {count} 台手机" if count else
+                            "没扫到手机：确认手机也连着同一个路由器，或换个网段再试")
         elif kind == "peer":
             self.remote_label.configure(text=short_path(payload.get("root", ""), 36))
         elif kind == "plan":

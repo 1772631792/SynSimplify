@@ -25,6 +25,9 @@ class HostState:
         self.peers: dict[str, dict] = {}
         # auto：所有网卡都广播；wifi：只从无线网卡广播（同时插网线时用）
         self.discover_mode = "auto"
+        # 最近一次收到手机广播的来源，用来区分「广播没到」和「广播到了但连不上」
+        self.last_discover_ip = ""
+        self.last_discover_at = 0.0
         self.sync_status = "idle"        # idle / scanning / running / done / error / stopped
         self.sync_mode = "push"
         self.sync_stats: dict = {}
