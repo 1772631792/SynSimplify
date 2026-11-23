@@ -1,0 +1,9 @@
+# Python
+__pycache__/
+*.py[cod]
+*.spec
+
+# 构建中间产物（dist/ 里的安装包是要发布的，保留）
+host/build/
+app/build/
+app/.dart_tool/

@@ -35,7 +35,7 @@ from config import (
     human_size,
     load_config,
 )
-from discovery import discovery_loop
+from discovery import beacon_loop, discovery_loop
 from server import start_http
 from state import HostState
 from sync import PeerClient, SyncRunner
@@ -84,10 +84,12 @@ def run_headless(state: HostState, port: int, args) -> int:
         print(f"[x] 端口 {port}~{port + 20} 都被占用了")
         return 1
     threading.Thread(target=discovery_loop, args=(state, threading.Event()), daemon=True).start()
+    threading.Thread(target=beacon_loop, args=(state, threading.Event()), daemon=True).start()
 
     print(f"[+] {APP_NAME} v{APP_VER}")
     print(f"[+] 同步文件夹：{state.get_root()}")
     print(f"[+] 服务地址：0.0.0.0:{state.port}  发现端口：{DISCOVERY_PORT}")
+    print(f"[+] 找设备方式：{'只走 WiFi' if state.discover_mode == 'wifi' else '所有网卡'}")
     print("[+] Ctrl+C 结束")
 
     if args.sync:
@@ -244,7 +246,31 @@ def run_selftest() -> int:
             probe.close()
         check("发现: 手机广播后收到 HOST 回应", ok)
 
-        # 8. GET 下载能拿到字节
+        # 8. 主动广播：手机一声不吭，电脑也该被找到
+        beacon_rx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        beacon_rx.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        beacon_ok = False
+        bstop = threading.Event()
+        try:
+            beacon_rx.bind(("0.0.0.0", 37750))
+            beacon_rx.settimeout(3.0)
+            beacon_state = HostState(base / "beacon", host_id="beacon-pc", name="BEACON-PC")
+            beacon_state.port = state_pc.port
+            threading.Thread(target=beacon_loop, args=(beacon_state, bstop, 0.2, 37750),
+                             daemon=True).start()
+            while True:
+                data, _ = beacon_rx.recvfrom(4096)
+                if data.startswith(b"SYNSIMPLIFY/HOST"):
+                    beacon_ok = True
+                    break
+        except Exception:
+            beacon_ok = False
+        finally:
+            bstop.set()
+            beacon_rx.close()
+        check("发现: 电脑主动广播，手机不广播也能找到", beacon_ok)
+
+        # 9. GET 下载能拿到字节
         target = base / "verify.md"
         client.download("note.md", target)
         check("下载: GET 到的内容和手机一致",
@@ -281,6 +307,7 @@ def main() -> int:
     state = HostState(root, host_id=str(cfg.get("id") or "synsimplify"),
                       name=str(cfg.get("name") or socket.gethostname()))
     state.port = port
+    state.discover_mode = "wifi" if cfg.get("discover_mode") == "wifi" else "auto"
 
     if args.no_gui or args.sync:
         return run_headless(state, port, args)

@@ -10,7 +10,7 @@ import uuid
 from pathlib import Path
 
 APP_NAME = "SynSimplify"
-APP_VER = "1.0.0"
+APP_VER = "1.0.1"
 
 DISCOVERY_PORT = 37120
 HTTP_PORT = 37121
@@ -46,6 +46,7 @@ def _default_config() -> dict:
         "mirror_delete": False,
         "include_hidden": False,
         "peer_id": "",
+        "discover_mode": "auto",     # auto：所有网卡；wifi：只从无线网卡找设备
     }
 
 

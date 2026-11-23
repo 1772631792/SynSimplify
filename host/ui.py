@@ -29,7 +29,7 @@ from config import (
     short_path,
     update_config,
 )
-from discovery import discovery_loop
+from discovery import beacon_loop, discovery_loop
 from draw import (
     Avatar,
     CheckBox,
@@ -124,7 +124,7 @@ class HostApp:
         self.root = tk.Tk()
         self.root.title(f"{APP_NAME} · 同网双向同步")
         self.root.configure(bg=BG)
-        self.root.geometry("1240x860")
+        self.root.geometry("1240x900")
         self.root.minsize(1080, 760)
 
         icon = bundled_icon()
@@ -147,6 +147,7 @@ class HostApp:
             self.set_footer(f"HTTP 端口 {self.port} 打不开，可能被防火墙或其他程序占用")
         self.port = self.state.port
         threading.Thread(target=discovery_loop, args=(self.state, self.stop), daemon=True).start()
+        threading.Thread(target=beacon_loop, args=(self.state, self.stop), daemon=True).start()
         self.addr_label.configure(text=f"{local_ip()}:{self.port}")
         self.set_footer("已就绪：手机打开 SynSimplify，同一个 WiFi 会自动发现这台电脑")
 
@@ -190,14 +191,37 @@ class HostApp:
 
         body = tk.Frame(root, bg=BG)
         body.grid(row=2, column=0, sticky="nsew", padx=20)
-        left = tk.Frame(body, bg=BG, width=356)
-        left.pack(side="left", fill="y")
-        left.pack_propagate(False)
+
+        # 左栏卡片较多，窗口不高时会超出底部，放进画布用滚轮上下看
+        left_wrap = tk.Frame(body, bg=BG, width=356)
+        left_wrap.pack(side="left", fill="y")
+        left_wrap.pack_propagate(False)
+
+        left_canvas = tk.Canvas(left_wrap, bg=BG, highlightthickness=0, bd=0)
+        left_canvas.pack(side="left", fill="both", expand=True)
+        left = tk.Frame(left_canvas, bg=BG)
+        left_win = left_canvas.create_window((0, 0), window=left, anchor="nw")
+
+        def _sync_left(_event=None) -> None:
+            left_canvas.configure(scrollregion=left_canvas.bbox("all"))
+            left_canvas.itemconfigure(left_win, width=left_canvas.winfo_width())
+
+        def _on_left_wheel(event) -> None:
+            box = left_canvas.bbox("all")
+            if not box or box[3] <= left_canvas.winfo_height():
+                return
+            left_canvas.yview_scroll(-1 if getattr(event, "delta", 0) > 0 else 1, "units")
+
+        left.bind("<Configure>", _sync_left)
+        left_canvas.bind("<Configure>", _sync_left)
 
         self._build_folder_cards(left)
         self._build_direction_card(left)
         self._build_options_card(left)
         self._build_buttons(left)
+
+        self._bind_wheel(left, _on_left_wheel)
+        left_canvas.bind("<MouseWheel>", _on_left_wheel)
 
         self._build_right(body)
 
@@ -245,6 +269,16 @@ class HostApp:
                                    font=(self.font, 9), cursor="hand2")
         self.addr_label.pack(anchor="e", pady=(4, 0))
         self.addr_label.bind("<Button-1>", lambda e: self.copy_address())
+
+    @staticmethod
+    def _bind_wheel(widget, handler) -> None:
+        """tk 的滚轮事件不会冒泡，得挨个控件绑一遍。"""
+        for child in widget.winfo_children():
+            HostApp._bind_wheel(child, handler)
+        try:
+            widget.bind("<MouseWheel>", handler)
+        except Exception:  # noqa: BLE001
+            pass
 
     def _card(self, parent, title: str):
         outer = tk.Frame(parent, bg=CARD, highlightbackground=STROKE, highlightthickness=1)
@@ -311,7 +345,14 @@ class HostApp:
             inner, "包含隐藏文件", value=bool(self.cfg.get("include_hidden")),
             bg=CARD, command=self._on_option, hint="以 . 开头的文件和文件夹",
             font_family=self.font)
-        self.cb_hidden.pack(fill="x")
+        self.cb_hidden.pack(fill="x", pady=(0, 8))
+
+        self.cb_wifi = CheckBox(
+            inner, "只从 WiFi 找设备", value=self.state.discover_mode == "wifi",
+            bg=CARD, command=self._on_discover_mode,
+            hint="网线和 WiFi 同时连着时勾上，广播只走无线网卡",
+            font_family=self.font)
+        self.cb_wifi.pack(fill="x")
 
     def _build_buttons(self, parent) -> None:
         row = tk.Frame(parent, bg=BG)
@@ -520,6 +561,12 @@ class HostApp:
                       include_hidden=self.cb_hidden.value)
         self.set_footer("选项已保存")
 
+    def _on_discover_mode(self, value: bool) -> None:
+        self.state.discover_mode = "wifi" if value else "auto"
+        update_config(discover_mode=self.state.discover_mode)
+        self.set_footer("找设备方式：只从 WiFi 网卡广播" if value
+                        else "找设备方式：所有网卡都广播")
+
     def current_peer(self) -> dict | None:
         for peer in self.peers:
             if peer["id"] == self.selected_peer_id:
@@ -716,6 +763,8 @@ class HostApp:
         if kind == "phase":
             self.file_label.configure(text=short_path(payload.get("text", ""), 60))
         elif kind == "warn":
+            self.set_footer(payload.get("text", ""))
+        elif kind == "info":
             self.set_footer(payload.get("text", ""))
         elif kind == "peer":
             self.remote_label.configure(text=short_path(payload.get("root", ""), 36))

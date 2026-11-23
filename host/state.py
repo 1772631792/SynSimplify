@@ -23,6 +23,8 @@ class HostState:
         self.hue = hue_from_id(host_id)
         self.events: "queue.Queue[tuple[str, dict]]" = queue.Queue()
         self.peers: dict[str, dict] = {}
+        # auto：所有网卡都广播；wifi：只从无线网卡广播（同时插网线时用）
+        self.discover_mode = "auto"
         self.sync_status = "idle"        # idle / scanning / running / done / error / stopped
         self.sync_mode = "push"
         self.sync_stats: dict = {}
