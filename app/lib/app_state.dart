@@ -22,6 +22,7 @@ class AppSettings {
   String peerId = '';
   String manualHost = '';
   String deviceId = '';
+  bool p2pMode = false; // 手机互传：只连另一台手机
 }
 
 class AppState extends ChangeNotifier {
@@ -110,7 +111,8 @@ class AppState extends ChangeNotifier {
       ..mirrorDelete = _prefs!.getBool('mirrorDelete') ?? false
       ..peerId = _prefs!.getString('peerId') ?? ''
       ..manualHost = _prefs!.getString('manualHost') ?? ''
-      ..deviceId = _prefs!.getString('deviceId') ?? '';
+      ..deviceId = _prefs!.getString('deviceId') ?? ''
+      ..p2pMode = _prefs!.getBool('p2pMode') ?? false;
 
     if (settings.deviceId.isEmpty) {
       settings.deviceId =
@@ -133,6 +135,7 @@ class AppState extends ChangeNotifier {
       deviceId: settings.deviceId,
       hue: hue,
       rootProvider: () => settings.localRoot,
+      p2pProvider: () => settings.p2pMode,
       onPeerSeen: (ip, device, id) {
         if (device.isNotEmpty && notice.isEmpty) {
           notice = '$device 正在连接这台手机';
@@ -142,7 +145,7 @@ class AppState extends ChangeNotifier {
     );
     serverReady = await _server!.start();
     if (!serverReady) {
-      notice = '手机端服务端口被占用，电脑只能单向被同步';
+      notice = '手机端服务端口被占用，对方无法主动取文件';
     }
     notifyListeners();
     await startDiscovery();
@@ -172,6 +175,7 @@ class AppState extends ChangeNotifier {
     await p.setBool('mirrorDelete', settings.mirrorDelete);
     await p.setString('peerId', settings.peerId);
     await p.setString('manualHost', settings.manualHost);
+    await p.setBool('p2pMode', settings.p2pMode);
   }
 
   // ------------------------------------------------------------- 发现
@@ -181,6 +185,8 @@ class AppState extends ChangeNotifier {
         'port': _server?.port ?? kServerPort,
         'root': settings.localRoot,
         'hue': hue,
+        'role': 'phone',
+        'p2p': settings.p2pMode,
         'app': '1.0.0',
       };
 
@@ -204,13 +210,16 @@ class AppState extends ChangeNotifier {
 
     discovery.payloadBuilder = _payload;
     discovery.onHost = _onHost;
-    discovery.intervalMs = 700;
+    discovery.selfId = settings.deviceId;
+    discovery.p2pMode = settings.p2pMode;
+    final beaconMs = settings.p2pMode ? 300 : 700;
+    discovery.intervalMs = beaconMs;
     final ok = await discovery.start();
     if (!ok) {
       link = LinkState.offline;
       notice = '打不开局域网广播，确认已连上 WiFi';
     }
-    discovery.setInterval(700);
+    discovery.setInterval(beaconMs);
     _settleTimer = Timer.periodic(const Duration(milliseconds: 220), (_) => _maybeSettle());
     notifyListeners();
   }
@@ -230,7 +239,10 @@ class AppState extends ChangeNotifier {
     if (candidates.isEmpty) return;
     final started = _scanStartedAt;
     if (started == null) return;
-    if (DateTime.now().difference(started) < const Duration(milliseconds: 500)) return;
+    final wait = settings.p2pMode
+        ? const Duration(milliseconds: 150)
+        : const Duration(milliseconds: 500);
+    if (DateTime.now().difference(started) < wait) return;
 
     _settled = true;
     final preferred = settings.peerId;
@@ -244,9 +256,10 @@ class AppState extends ChangeNotifier {
     }
     if (candidates.length > 1 || _manual) {
       link = LinkState.choosing;
+      final kind = settings.p2pMode ? '手机' : '电脑';
       notice = candidates.length > 1
-          ? '发现 ${candidates.length} 台电脑，选一台同步'
-          : '找到 1 台电脑，点一下连上';
+          ? '发现 ${candidates.length} 台$kind，选一台同步'
+          : '找到 1 台$kind，点一下连上';
     }
     notifyListeners();
   }
@@ -287,7 +300,7 @@ class AppState extends ChangeNotifier {
     } catch (_) {
       api.close();
       link = candidates.length > 1 ? LinkState.choosing : LinkState.scanning;
-      notice = '连不上 ${host.name}，确认电脑端已放行防火墙';
+      notice = '连不上 ${host.name}，确认对方已打开 SynSimplify 并放行防火墙';
       notifyListeners();
     } finally {
       _adopting = false;
@@ -339,7 +352,7 @@ class AppState extends ChangeNotifier {
           _api = null;
           peer = null;
           link = LinkState.offline;
-          notice = '和电脑断开了，正在重新寻找…';
+          notice = '和对方断开了，正在重新寻找…';
           notifyListeners();
           unawaited(startDiscovery());
         }
@@ -354,9 +367,12 @@ class AppState extends ChangeNotifier {
     final head = input.split('/').first;
     final parts = head.split(':');
     final ip = parts.first;
-    final port = parts.length > 1 ? (int.tryParse(parts[1]) ?? kPeerDefaultPort) : kPeerDefaultPort;
+    final defaultPort = settings.p2pMode ? kServerPort : kPeerDefaultPort;
+    final port = parts.length > 1
+        ? (int.tryParse(parts[1]) ?? defaultPort)
+        : defaultPort;
     if (!RegExp(r'^\d{1,3}(\.\d{1,3}){3}$').hasMatch(ip)) {
-      notice = '地址格式：192.168.1.8 或 192.168.1.8:37121';
+      notice = '地址格式：192.168.1.8 或 192.168.1.8:$defaultPort';
       notifyListeners();
       return false;
     }
@@ -370,10 +386,11 @@ class AppState extends ChangeNotifier {
 
     final host = PeerInfo(
       id: 'manual-$ip',
-      name: '电脑',
+      name: settings.p2pMode ? '手机' : '电脑',
       ip: ip,
       port: port,
       hue: 220,
+      role: settings.p2pMode ? 'phone' : 'host',
     );
     await _adopt(host);
     return connected;
@@ -406,6 +423,22 @@ class AppState extends ChangeNotifier {
     settings.mirrorDelete = v;
     unawaited(_save());
     notifyListeners();
+  }
+
+  /// 切换手机互传模式。换模式后清掉旧对端，立刻重新发现。
+  Future<void> setP2pMode(bool v) async {
+    if (settings.p2pMode == v) return;
+    settings.p2pMode = v;
+    await _save();
+    _heartbeat?.cancel();
+    _api?.close();
+    _api = null;
+    peer = null;
+    settings.peerId = '';
+    await _save();
+    link = LinkState.scanning;
+    notifyListeners();
+    await startDiscovery();
   }
 
   void setDeviceName(String name) {
@@ -456,7 +489,7 @@ class AppState extends ChangeNotifier {
     if (running) return;
     final api = _api;
     if (api == null || peer == null) {
-      notice = '先连上电脑再同步';
+      notice = '先连上${settings.p2pMode ? '手机' : '电脑'}再同步';
       notifyListeners();
       return;
     }
@@ -472,7 +505,9 @@ class AppState extends ChangeNotifier {
     liveBytes = 0;
     finishedAt = 0;
     currentFile = '';
-    phase = dry ? '正在对比两边文件…' : '正在读取电脑文件列表…';
+    phase = dry
+        ? '正在对比两边文件…'
+        : '正在读取${settings.p2pMode ? '对方手机' : '电脑'}文件列表…';
     notifyListeners();
 
     final engine = SyncEngine(
@@ -481,6 +516,7 @@ class AppState extends ChangeNotifier {
       direction: settings.direction,
       includeHidden: settings.includeHidden,
       mirrorDelete: settings.mirrorDelete,
+      remoteLabel: settings.p2pMode ? '对方手机' : '电脑',
       onPhase: (text) {
         phase = text;
         notifyListeners();

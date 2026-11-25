@@ -246,6 +246,7 @@ class SyncEngine {
     required this.direction,
     required this.includeHidden,
     required this.mirrorDelete,
+    this.remoteLabel = '电脑',
     this.onPhase,
     this.onPlan,
     this.onOpStart,
@@ -260,6 +261,7 @@ class SyncEngine {
   final Direction direction;
   final bool includeHidden;
   final bool mirrorDelete;
+  final String remoteLabel;
 
   final void Function(String text)? onPhase;
   final void Function(List<SyncOp> ops, SyncStats stats)? onPlan;
@@ -278,9 +280,9 @@ class SyncEngine {
     final stats = SyncStats();
     final started = DateTime.now();
 
-    onPhase?.call('读取电脑文件列表…');
+    onPhase?.call('读取$remoteLabel文件列表…');
     final remote = await api.scan(hidden: includeHidden);
-    onPhase?.call('扫描手机文件夹…');
+    onPhase?.call('扫描本机文件夹…');
     final local = await scanLocal(localRoot, includeHidden: includeHidden);
 
     final ops = makePlan(local.items, remote.items, direction, mirrorDelete: mirrorDelete);

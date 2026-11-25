@@ -411,11 +411,13 @@ class DirectionTile extends StatelessWidget {
     required this.direction,
     required this.selected,
     required this.onTap,
+    this.p2p = false,
   });
 
   final Direction direction;
   final bool selected;
   final VoidCallback onTap;
+  final bool p2p;
 
   @override
   Widget build(BuildContext context) {
@@ -498,7 +500,7 @@ class DirectionTile extends StatelessWidget {
                         Row(
                           children: [
                             Text(
-                              direction.title,
+                              direction.titleFor(p2p),
                               style: const TextStyle(
                                 color: Palette.text,
                                 fontSize: 13.5,
@@ -519,7 +521,7 @@ class DirectionTile extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          direction.subtitle,
+                          direction.subtitleFor(p2p),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(

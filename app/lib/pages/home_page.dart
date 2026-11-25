@@ -126,9 +126,11 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
               const SizedBox(height: 3),
-              const Text(
-                '同一 WiFi · 双向文件夹同步',
-                style: TextStyle(color: Palette.textDim, fontSize: 12),
+              Text(
+                app.settings.p2pMode
+                    ? '同一 WiFi · 手机互传'
+                    : '同一 WiFi · 双向文件夹同步',
+                style: const TextStyle(color: Palette.textDim, fontSize: 12),
               ),
             ],
           ),
@@ -181,19 +183,22 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _scanningCard(BuildContext context) {
+    final p2p = app.settings.p2pMode;
     return GlassCard(
       padding: const EdgeInsets.fromLTRB(18, 10, 18, 16),
       child: Column(
         children: [
           const RadarOrb(active: true, connected: false, size: 148),
           const SizedBox(height: 4),
-          const Text(
-            '正在同一 WiFi 内寻找电脑…',
-            style: TextStyle(color: Palette.text, fontSize: 14, fontWeight: FontWeight.w600),
+          Text(
+            p2p ? '正在同一 WiFi 内寻找另一台手机…' : '正在同一 WiFi 内寻找电脑…',
+            style: const TextStyle(color: Palette.text, fontSize: 14, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 5),
           Text(
-            app.notice.isEmpty ? '只有一台电脑时会自动连上，不用点任何东西' : app.notice,
+            app.notice.isEmpty
+                ? (p2p ? '另一台手机也开着 App 时会自动连上，不用点任何东西' : '只有一台电脑时会自动连上，不用点任何东西')
+                : app.notice,
             textAlign: TextAlign.center,
             style: TextStyle(
               color: app.notice.isEmpty ? Palette.textMuted : Palette.warn,
@@ -205,7 +210,7 @@ class _HomePageState extends State<HomePage> {
           TextButton.icon(
             onPressed: () => _manualDialog(context),
             icon: const Icon(Icons.link_rounded, size: 16),
-            label: const Text('找不到？手动填电脑地址'),
+            label: Text(p2p ? '找不到？手动填手机地址' : '找不到？手动填电脑地址'),
             style: TextButton.styleFrom(foregroundColor: Palette.textDim),
           ),
         ],
@@ -220,7 +225,7 @@ class _HomePageState extends State<HomePage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SectionLabel(
-            '发现 ${peers.length} 台电脑',
+            '发现 ${peers.length} 台${app.settings.p2pMode ? '手机' : '电脑'}',
             trailing: Pill(label: '选一台', color: Palette.accent2, dense: true),
           ),
           const SizedBox(height: 12),
@@ -265,7 +270,7 @@ class _HomePageState extends State<HomePage> {
             DeviceAvatar(
               hue: peer.hue,
               size: 40,
-              icon: Icons.desktop_windows_rounded,
+              icon: peer.isPhone ? Icons.smartphone_rounded : Icons.desktop_windows_rounded,
               online: true,
             ),
             const SizedBox(width: 11),
@@ -318,7 +323,7 @@ class _HomePageState extends State<HomePage> {
               DeviceAvatar(
                 hue: peer.hue,
                 size: 44,
-                icon: Icons.desktop_windows_rounded,
+                icon: peer.isPhone ? Icons.smartphone_rounded : Icons.desktop_windows_rounded,
                 online: true,
               ),
               const SizedBox(width: 12),
@@ -357,7 +362,11 @@ class _HomePageState extends State<HomePage> {
             children: [
               Expanded(
                 child: Text(
-                  peer.busy ? '电脑正在同步…' : '电脑端也能点「立即同步」把文件推过来',
+                  peer.busy
+                      ? (peer.isPhone ? '对方正在同步…' : '电脑正在同步…')
+                      : (peer.isPhone
+                          ? '对方也能点「立即同步」把文件推过来'
+                          : '电脑端也能点「立即同步」把文件推过来'),
                   style: const TextStyle(color: Palette.textMuted, fontSize: 11),
                 ),
               ),
@@ -388,10 +397,10 @@ class _HomePageState extends State<HomePage> {
             children: [
               const Icon(Icons.wifi_off_rounded, color: Palette.warn, size: 20),
               const SizedBox(width: 9),
-              const Expanded(
+              Expanded(
                 child: Text(
-                  '没找到电脑',
-                  style: TextStyle(
+                  app.settings.p2pMode ? '没找到手机' : '没找到电脑',
+                  style: const TextStyle(
                     color: Palette.text,
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
@@ -404,7 +413,9 @@ class _HomePageState extends State<HomePage> {
           const SizedBox(height: 8),
           Text(
             app.notice.isEmpty
-                ? '确认手机和电脑连的是同一个 WiFi，电脑端已打开 SynSimplify 并放行防火墙'
+                ? (app.settings.p2pMode
+                    ? '确认两台手机连的是同一个 WiFi，另一台也打开了 SynSimplify'
+                    : '确认手机和电脑连的是同一个 WiFi，电脑端已打开 SynSimplify 并放行防火墙')
                 : app.notice,
             style: const TextStyle(color: Palette.textMuted, fontSize: 11.5, height: 1.45),
           ),
@@ -452,10 +463,14 @@ class _HomePageState extends State<HomePage> {
           ),
           const SizedBox(height: 13),
           _folderRow(
-            icon: Icons.desktop_windows_rounded,
+            icon: app.settings.p2pMode
+                ? Icons.smartphone_rounded
+                : Icons.desktop_windows_rounded,
             gradient: Palette.pushGrad,
-            title: '电脑文件夹',
-            path: remote.isEmpty ? '连上电脑后显示' : remote,
+            title: app.settings.p2pMode ? '对方手机文件夹' : '电脑文件夹',
+            path: remote.isEmpty
+                ? (app.settings.p2pMode ? '连上手机后显示' : '连上电脑后显示')
+                : remote,
             trailing: const Pill(label: '只读', color: Palette.textDim, dense: true),
           ),
           _connector(),
@@ -618,6 +633,7 @@ class _HomePageState extends State<HomePage> {
               direction: d,
               selected: app.settings.direction == d,
               onTap: () => app.setDirection(d),
+              p2p: app.settings.p2pMode,
             ),
         ],
       ),
@@ -633,6 +649,13 @@ class _HomePageState extends State<HomePage> {
         children: [
           const SectionLabel('选项', padding: EdgeInsets.only(left: 2)),
           const SizedBox(height: 4),
+          ToggleRow(
+            title: '手机互传模式',
+            subtitle: '只和另一台手机连，网内只有两台时秒连',
+            value: app.settings.p2pMode,
+            onChanged: app.setP2pMode,
+          ),
+          const SizedBox(height: 6),
           ToggleRow(
             title: '删除对方多余的文件',
             subtitle: twoWay ? '双向同步时不生效' : '镜像效果，小心使用',
@@ -688,7 +711,9 @@ class _HomePageState extends State<HomePage> {
     return Column(
       children: [
         GradientButton(
-          label: connected ? '开始同步' : '先连上电脑',
+          label: connected
+              ? '开始同步'
+              : (app.settings.p2pMode ? '先连上手机' : '先连上电脑'),
           icon: Icons.sync_rounded,
           gradient: grad,
           enabled: connected,
@@ -881,14 +906,17 @@ class _HomePageState extends State<HomePage> {
     final result = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('手动连接电脑', style: TextStyle(fontSize: 17)),
+        title: Text(app.settings.p2pMode ? '手动连接手机' : '手动连接电脑',
+            style: const TextStyle(fontSize: 17)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              '在电脑端窗口右上角能看到这个地址，例如 192.168.1.8:37121',
-              style: TextStyle(color: Palette.textDim, fontSize: 12, height: 1.4),
+            Text(
+              app.settings.p2pMode
+                  ? '填另一台手机的 IP，端口默认 37131，例如 192.168.1.9:37131'
+                  : '在电脑端窗口右上角能看到这个地址，例如 192.168.1.8:37121',
+              style: const TextStyle(color: Palette.textDim, fontSize: 12, height: 1.4),
             ),
             const SizedBox(height: 14),
             TextField(
@@ -896,7 +924,9 @@ class _HomePageState extends State<HomePage> {
               autofocus: true,
               keyboardType: TextInputType.text,
               decoration: InputDecoration(
-                hintText: '192.168.1.8:37121',
+                hintText: app.settings.p2pMode
+                    ? '192.168.1.9:37131'
+                    : '192.168.1.8:37121',
                 filled: true,
                 fillColor: Colors.white.withValues(alpha: 0.04),
                 border: OutlineInputBorder(

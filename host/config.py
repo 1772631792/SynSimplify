@@ -10,7 +10,7 @@ import uuid
 from pathlib import Path
 
 APP_NAME = "SynSimplify"
-APP_VER = "1.0.3"
+APP_VER = "1.1.0"
 
 DISCOVERY_PORT = 37120
 HTTP_PORT = 37121

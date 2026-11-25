@@ -13,6 +13,7 @@ class LocalServer {
     required this.deviceId,
     required this.hue,
     required this.rootProvider,
+    this.p2pProvider,
     this.onPeerSeen,
   });
 
@@ -20,6 +21,7 @@ class LocalServer {
   final String deviceId;
   final int hue;
   final String Function() rootProvider;
+  final bool Function()? p2pProvider;
   final void Function(String ip, String device, String deviceId)? onPeerSeen;
 
   HttpServer? _server;
@@ -98,6 +100,8 @@ class LocalServer {
           'port': port,
           'root': root,
           'rootName': baseName(root),
+          'role': 'phone',
+          'p2p': p2pProvider?.call() ?? false,
           'ver': 1,
           'app': '1.0.1',
         });

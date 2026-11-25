@@ -133,8 +133,8 @@ class _SettingsPageState extends State<SettingsPage> {
             Expanded(
               child: Text(
                 app.serverReady
-                    ? '电脑也能主动把文件推到这台手机（端口 ${app.notice.contains('占用') ? '异常' : '37131'}）'
-                    : '手机端服务没起来，电脑无法主动推送',
+                    ? '${app.settings.p2pMode ? '另一台手机' : '电脑'}也能主动把文件推过来（端口 ${app.notice.contains('占用') ? '异常' : '37131'}）'
+                    : '手机端服务没起来，对方无法主动推送',
                 style: TextStyle(
                   color: app.serverReady ? Palette.textMuted : Palette.warn,
                   fontSize: 11,
@@ -229,7 +229,7 @@ class _SettingsPageState extends State<SettingsPage> {
       title: '连接',
       children: [
         _row(
-          label: '当前电脑',
+          label: app.settings.p2pMode ? '当前手机' : '当前电脑',
           value: peer == null
               ? '还没连上'
               : '${peer.name} · ${peer.ip}:${peer.port}',
@@ -243,7 +243,9 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
         ),
         Text(
-          peer?.root.isNotEmpty == true ? '电脑文件夹：${peer!.root}' : '电脑文件夹：连上后显示',
+          peer?.root.isNotEmpty == true
+              ? '${app.settings.p2pMode ? '对方手机' : '电脑'}文件夹：${peer!.root}'
+              : '${app.settings.p2pMode ? '对方手机' : '电脑'}文件夹：连上后显示',
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(color: Palette.textMuted, fontSize: 11, height: 1.4),
@@ -255,7 +257,9 @@ class _SettingsPageState extends State<SettingsPage> {
           style: const TextStyle(fontSize: 13, color: Palette.text),
           decoration: InputDecoration(
             isDense: true,
-            hintText: '手动填电脑地址，例如 192.168.1.8:37121',
+            hintText: app.settings.p2pMode
+                ? '手动填另一台手机地址，例如 192.168.1.9:37131'
+                : '手动填电脑地址，例如 192.168.1.8:37121',
             hintStyle: const TextStyle(color: Palette.textMuted, fontSize: 12),
             filled: true,
             fillColor: Colors.white.withValues(alpha: 0.04),
@@ -308,18 +312,21 @@ class _SettingsPageState extends State<SettingsPage> {
       children: [
         const Text(
           'SynSimplify 1.0.0 · 协议 v1\n'
-          '手机和电脑在同一个 WiFi 里直连，文件不经过任何服务器。\n'
+          '手机和电脑（或另一台手机）在同一个 WiFi 里直连，文件不经过任何服务器。\n'
+          '手机互传只需一端开启，网内只有两台手机时自动连上。\n'
           '端口：发现 37120 / 电脑 37121 / 手机 37131',
           style: TextStyle(color: Palette.textMuted, fontSize: 11.5, height: 1.6),
         ),
         const SizedBox(height: 12),
-        const Row(
+        Row(
           children: [
-            Icon(Icons.lightbulb_outline_rounded, size: 15, color: Palette.accent),
-            SizedBox(width: 6),
+            const Icon(Icons.lightbulb_outline_rounded, size: 15, color: Palette.accent),
+            const SizedBox(width: 6),
             Text(
-              '推荐「电脑 → 手机」：电脑上整理好，手机一开就同步',
-              style: TextStyle(color: Palette.textDim, fontSize: 11),
+              app.settings.p2pMode
+                  ? '推荐「双向同步」：两台手机取新、缺的补齐'
+                  : '推荐「电脑 → 手机」：电脑上整理好，手机一开就同步',
+              style: const TextStyle(color: Palette.textDim, fontSize: 11),
             ),
           ],
         ),
@@ -337,9 +344,11 @@ class _SettingsPageState extends State<SettingsPage> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              '这台手机会以这个名字出现在电脑上',
-              style: TextStyle(color: Palette.textDim, fontSize: 12),
+            Text(
+              app.settings.p2pMode
+                  ? '这台手机会以这个名字出现在另一台手机上'
+                  : '这台手机会以这个名字出现在电脑上',
+              style: const TextStyle(color: Palette.textDim, fontSize: 12),
             ),
             const SizedBox(height: 12),
             TextField(

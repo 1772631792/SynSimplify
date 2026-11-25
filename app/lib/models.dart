@@ -32,6 +32,22 @@ extension DirectionX on Direction {
         Direction.two => '稳',
       };
 
+  String titleFor(bool p2p) => p2p
+      ? switch (this) {
+          Direction.push => '对方 → 本机',
+          Direction.pull => '本机 → 对方',
+          Direction.two => '双向同步',
+        }
+      : title;
+
+  String subtitleFor(bool p2p) => p2p
+      ? switch (this) {
+          Direction.push => '对方手机的新文件覆盖到本机',
+          Direction.pull => '本机文件覆盖到对方手机',
+          Direction.two => '两边取新、缺的补齐，谁也丢不了',
+        }
+      : subtitle;
+
   static Direction fromWire(String v) => switch (v) {
         'pull' => Direction.pull,
         'two' => Direction.two,
@@ -51,6 +67,7 @@ class PeerInfo {
     this.busy = false,
     this.lastSeen = 0,
     this.latency = 0,
+    this.role = 'host',
   });
 
   final String id;
@@ -62,6 +79,9 @@ class PeerInfo {
   final bool busy;
   final int lastSeen;
   final int latency;
+  final String role; // 'host' = 电脑，'phone' = 另一台手机
+
+  bool get isPhone => role == 'phone';
 
   String get label => '$ip:$port';
 
@@ -84,6 +104,7 @@ class PeerInfo {
         busy: busy ?? this.busy,
         lastSeen: lastSeen ?? this.lastSeen,
         latency: latency ?? this.latency,
+        role: role,
       );
 }
 
